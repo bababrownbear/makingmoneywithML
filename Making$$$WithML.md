@@ -24,7 +24,8 @@ The columns are:
 
 
 ```python
-# Importing pandas. "pandas is a fast, powerful, flexible and easy to use open source data analysis and manipulation tool, built on top of the Python programming language."
+# Importing pandas. "pandas is a fast, powerful, flexible and easy to use open source data
+# analysis and manipulation tool, built on top of the Python programming language."
 import pandas as pd 			  		 			 	 	 		 		 	  		   	  			  	
 pd.options.display.max_rows = 30
 # Read in the CSV, save it to a pandas dataframe variable called 'tsla_data'.
@@ -130,7 +131,8 @@ tsla_data.head()
 # .shape tells us the number of rows, and the number of columns.
 # This dataset has 2416 rows, and 7 columns.
 # The NYSE and NASDAQ average about 253 trading days a year. 
-# This is from 365.25 (days on average per year) * 5/7 (proportion work days per week) - 6 (weekday holidays) - 3*5/7 (fixed date holidays) = 252.75 ≈ 253.
+# This is from 365.25 (days on average per year) * 5/7 (proportion work days per week) 
+# - 6 (weekday holidays) - 3*5/7 (fixed date holidays) = 252.75 ≈ 253.
 # 10 * 253 = 2530, this dataset is pretty close. Let's assume it's not missing any days.
 tsla_data.shape
 ```
@@ -163,7 +165,8 @@ Let's start with just 2010, to see how much money we would have made if we start
 
 
 ```python
-# We're going to just pull the 2010 data. I like sticking this in variable, and array, because we'll likely do this again, and by multiple years.
+# We're going to just pull the 2010 data. I like sticking this in variable, and array,  
+# because we'll likely do this again, and by multiple years.
 years_to_pull = [2010]
 
 # Let's tell pandas to treat the 'Date' column as a date.
@@ -195,7 +198,8 @@ Let's add a couple columns to help us with the data. I want to see tomorrow's ad
 
 
 ```python
-# .shift(-1) brings the next row into the equation, so that we can add a column that shows tomorrow's adjusted close.
+# .shift(-1) brings the next row into the equation, so that we can add a column that  
+# shows tomorrow's adjusted close.
 tsla_data_by_year["Adj Close Tomorrow"] = tsla_data_by_year["Adj Close"].shift(-1)
 # This adds another column as a bool to quickly show if the stock goes up or down tomorrow.
 tsla_data_by_year["Stock Goes Up Tomorrow"] = tsla_data_by_year["Adj Close"] < tsla_data_by_year["Adj Close Tomorrow"]
@@ -637,16 +641,18 @@ plt.title('30 Day Bollinger Band for Tesla')
 plt.ylabel('Price (USD)')
 plt.show();
 
-# This plot will show us the adjusted close, the rolling average, and the upper and lower bands of the TSLA stock.
+# This plot will show us the adjusted close, the rolling average, and the upper  
+# and lower bands of the TSLA stock.
 ```
 
 
-![png](output_16_0.png)
+![png](https://github.com/ilmstudios/makingmoneywithML/raw/master/output_16_0.png)
 
 
 
 ```python
-# Since we used a 30 day moving average, the starting 30 days do not have bollinger bands information.
+# Since we used a 30 day moving average, the starting 30 days do not have  
+# bollinger bands information.
 # We use dropna() to drop the nulls.
 tsla_data_by_year = tsla_data_by_year.dropna()
 tsla_data_by_year.head()
@@ -805,14 +811,19 @@ import sklearn.metrics
 import numpy as np
 from matplotlib import pyplot, dates
 
-# Here we are saying we want to predict the column 'Stock Goes Up Tomorrow' by storing the column name in a variable.
+# Here we are saying we want to predict the column 'Stock Goes Up Tomorrow' by 
+#  storing the column name in a variable.
 predict = 'Stock Goes Up Tomorrow'
 X = tsla_data_by_year
 # Treat the date as a number
 X['Date'] = X['Date'].dt.strftime('%Y%m%d')
 
-# For each column, apply a LabelEncoder. Regression problems need numerical values or categorical values. 
-# With columns like 'Position', we need to apply a LabelEncoding to set 1 = Hold, 2 = Buy, 3 = Sell (this is an example, the LabelEncoder will determine the numerical values of the categories at runtime.)
+# For each column, apply a LabelEncoder. Regression problems need numerical values 
+#  or categorical values. 
+# With columns like 'Position', we need to apply a LabelEncoding  
+# to set 1 = Hold, 2 = Buy, 3 = Sell  
+# (this is an example, the LabelEncoder will determine  
+# the numerical values of the categories at runtime.)
 for column in X.columns:
   if column != 'Date':
     if X[column].dtype == type(object):
@@ -828,7 +839,8 @@ X = tsla_data_by_year[['Date', 'Open', 'High', 'Low', 'Close', 'Adj Close', 'Vol
 # This is used to stratify. Learn more here: https://en.wikipedia.org/wiki/Stratified_sampling
 targets = tsla_data_by_year[predict]
 
-# This splits the dataset into training and testing. 60% of the data will be used to train, 40% will be used to test.
+# This splits the dataset into training and testing. 60% of the data will be  
+# used to train, 40% will be used to test.
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.40, random_state=101, stratify=targets)
 ```
 
@@ -974,7 +986,8 @@ print(confusion_matrix(y_test, y_pred))
 print(classification_report(y_test, y_pred))
 
 # The confusion matrix will show us True/False Positives, True/False Negatives.
-# This dataset is really small to get an accurate reading of the score, but so far it looks like we're close to 50% accurate.
+# This dataset is really small to get an accurate reading of the score,  
+# but so far it looks like we're close to 50% accurate.
 ```
 
     [[12  7]
@@ -995,24 +1008,19 @@ We're slightly worse than a coinflip! Let's see how this works.
 
 ```python
 predictions = clf.predict(X)
-# The values of predictions are stored as a value from 0.00 to 1.00, but we need them as a true/false to work with our algorithm to calculate $$. Here I compare to .5 (threshold) to determine if the prediction is true or false.
-# You can manually adjust the threshold to get a better True Positive / True Negative rate, sometimes it's beneficial if they're trying to reduce a particular metric.
+# The values of predictions are stored as a value from 0.00 to 1.00, but we need them 
+#  as a true/false to work with our algorithm to calculate $$. Here I compare to .5 (threshold)  
+# to determine if the prediction is true or false.
+# You can manually adjust the threshold to get a better True Positive / True Negative rate,  
+# sometimes it's beneficial if they're trying to reduce a particular metric.
 predictions = predictions > .5
 X['Stock Goes Up Tomorrow'] = predictions
-
 ```
-
-    /usr/local/lib/python3.6/dist-packages/ipykernel_launcher.py:5: SettingWithCopyWarning: 
-    A value is trying to be set on a copy of a slice from a DataFrame.
-    Try using .loc[row_indexer,col_indexer] = value instead
-    
-    See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-      """
-    
 
 
 ```python
-# Same code as above, functionized. Use a dataset to determine how much money we'll have made with our trades.
+# Same code as above, functionized. Use a dataset to determine  
+# how much money we'll have made with our trades.
 def howMuchMoneyDidWeMake(X):
   if('Money In Wallet' not in X ):
     X['Position'] = 'Hold'
@@ -1146,35 +1154,6 @@ def addBollingerBands(df):
 tsla_data_by_year = addBollingerBands(tsla_data_by_year)
 tsla_data_by_year.head()
 ```
-
-    /usr/local/lib/python3.6/dist-packages/ipykernel_launcher.py:5: SettingWithCopyWarning: 
-    A value is trying to be set on a copy of a slice from a DataFrame.
-    Try using .loc[row_indexer,col_indexer] = value instead
-    
-    See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-      """
-    /usr/local/lib/python3.6/dist-packages/ipykernel_launcher.py:6: SettingWithCopyWarning: 
-    A value is trying to be set on a copy of a slice from a DataFrame.
-    Try using .loc[row_indexer,col_indexer] = value instead
-    
-    See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-      
-    /usr/local/lib/python3.6/dist-packages/ipykernel_launcher.py:7: SettingWithCopyWarning: 
-    A value is trying to be set on a copy of a slice from a DataFrame.
-    Try using .loc[row_indexer,col_indexer] = value instead
-    
-    See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-      import sys
-    /usr/local/lib/python3.6/dist-packages/ipykernel_launcher.py:8: SettingWithCopyWarning: 
-    A value is trying to be set on a copy of a slice from a DataFrame.
-    Try using .loc[row_indexer,col_indexer] = value instead
-    
-    See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-      
-    
-
-
-
 
 <div>
 <style scoped>
@@ -1431,36 +1410,6 @@ for i in range(1, 8):
 
 all_the_money.tail(1)
 ```
-
-    /usr/local/lib/python3.6/dist-packages/ipykernel_launcher.py:5: SettingWithCopyWarning: 
-    A value is trying to be set on a copy of a slice from a DataFrame.
-    Try using .loc[row_indexer,col_indexer] = value instead
-    
-    See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-      """
-    /usr/local/lib/python3.6/dist-packages/ipykernel_launcher.py:6: SettingWithCopyWarning: 
-    A value is trying to be set on a copy of a slice from a DataFrame.
-    Try using .loc[row_indexer,col_indexer] = value instead
-    
-    See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-      
-    /usr/local/lib/python3.6/dist-packages/ipykernel_launcher.py:7: SettingWithCopyWarning: 
-    A value is trying to be set on a copy of a slice from a DataFrame.
-    Try using .loc[row_indexer,col_indexer] = value instead
-    
-    See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-      import sys
-    /usr/local/lib/python3.6/dist-packages/ipykernel_launcher.py:8: SettingWithCopyWarning: 
-    A value is trying to be set on a copy of a slice from a DataFrame.
-    Try using .loc[row_indexer,col_indexer] = value instead
-    
-    See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/user_guide/indexing.html#returning-a-view-versus-a-copy
-      
-    
-
-
-
-
 <div>
 <style scoped>
     .dataframe tbody tr th:only-of-type {
@@ -1521,7 +1470,7 @@ all_the_money.tail(1)
 
 
 
-Retraining the model every 30 days in 2011 we end up with 322 shares at \$28.56, that amounts to $9,196.
+Retraining the model every 30 days in 2011 we end up with 322 shares at $28.56, that amounts to $9,196.
 
 That's pretty good!
 
