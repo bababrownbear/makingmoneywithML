@@ -1,0 +1,2552 @@
+# Making $$$ with ML:
+
+You've got $1000 to burn. You've decided you want to invest in the stock market, specifically Tesla.
+Let's see if we can use Machine Learning to optimize our returns.
+
+Download TSLA.csv from here: https://www.kaggle.com/timoboz/tesla-stock-data-from-2010-to-2020/data
+
+Let's get started.
+
+Let's first do some Exploratory Data Analysis (EDA) on the file we've got.
+
+This file is a comma-separated values (CSV) file with 7 columns.
+
+The columns are:
+* Date
+* Opening price
+* Highest price that day
+* Lowest price that day
+* Closing price
+* Adjusted closing price, taking splits etc into account
+* Trading volume
+
+
+
+
+```python
+# Importing pandas. "pandas is a fast, powerful, flexible and easy to use open source data analysis and manipulation tool, built on top of the Python programming language."
+import pandas as pd 			  		 			 	 	 		 		 	  		   	  			  	
+pd.options.display.max_rows = 999
+# Read in the CSV, save it to a pandas dataframe variable called 'tsla_data'.
+tsla_data = pd.read_csv("TSLA.csv");
+```
+
+
+```python
+# .head() gives us the first 5 rows of the data frame.
+# You can also pass .head() a parameter to return any number of rows. Like .head(10) for 10 rows.
+tsla_data.head()
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Date</th>
+      <th>Open</th>
+      <th>High</th>
+      <th>Low</th>
+      <th>Close</th>
+      <th>Adj Close</th>
+      <th>Volume</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>2010-06-29</td>
+      <td>19.000000</td>
+      <td>25.00</td>
+      <td>17.540001</td>
+      <td>23.889999</td>
+      <td>23.889999</td>
+      <td>18766300</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2010-06-30</td>
+      <td>25.790001</td>
+      <td>30.42</td>
+      <td>23.299999</td>
+      <td>23.830000</td>
+      <td>23.830000</td>
+      <td>17187100</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>2010-07-01</td>
+      <td>25.000000</td>
+      <td>25.92</td>
+      <td>20.270000</td>
+      <td>21.959999</td>
+      <td>21.959999</td>
+      <td>8218800</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>2010-07-02</td>
+      <td>23.000000</td>
+      <td>23.10</td>
+      <td>18.709999</td>
+      <td>19.200001</td>
+      <td>19.200001</td>
+      <td>5139800</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>2010-07-06</td>
+      <td>20.000000</td>
+      <td>20.00</td>
+      <td>15.830000</td>
+      <td>16.110001</td>
+      <td>16.110001</td>
+      <td>6866900</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+
+```python
+# .shape tells us the number of rows, and the number of columns.
+# This dataset has 2416 rows, and 7 columns.
+# The NYSE and NASDAQ average about 253 trading days a year. 
+# This is from 365.25 (days on average per year) * 5/7 (proportion work days per week) - 6 (weekday holidays) - 3*5/7 (fixed date holidays) = 252.75 ≈ 253.
+# 10 * 253 = 2530, this dataset is pretty close. Let's assume it's not missing any days.
+tsla_data.shape
+```
+
+
+
+
+    (2416, 7)
+
+
+
+This is 10 years of data, with information about the stock starting from 2010. 
+
+Let's make some assumptions for the sake of time, we're not hedge fund managers yet.
+
+**Assumptions**
+
+*   We can only place one order a day (buy or sell), for the entire amount held.
+*   If we place an order, we assume it will go through at that price.
+*   We start with $1000
+
+We're going to track a few key pieces of information.
+
+*   Money in wallet
+*   Number of stocks held
+
+Let's start with just 2010, to see how much money we would have made if we started with $1000 on the first day of this file. 
+
+
+
+
+```python
+# We're going to just pull the 2010 data. I like sticking this in variable, and array, because we'll likely do this again, and by multiple years.
+years_to_pull = [2010]
+
+# Let's tell pandas to treat the 'Date' column as a date.
+tsla_data['Date'] = pd.to_datetime(tsla_data['Date'])
+
+# Let's make a function for re-use
+def pull_data_by_year(tsla_data, years_to_pull):
+  tsla_data_by_year = tsla_data[tsla_data['Date'].dt.year.isin(years_to_pull)]
+  return tsla_data_by_year
+
+tsla_data_by_year = pull_data_by_year(tsla_data, years_to_pull)
+tsla_data_by_year.shape
+```
+
+
+
+
+    (130, 7)
+
+
+
+
+```python
+# Sort by date ASC
+tsla_data_by_year = tsla_data_by_year.sort_values(by = 'Date')
+```
+
+Let's add a couple columns to help us with the data. I want to see tomorrow's adjusted close, and I want to know if it's higher than today's adjusted close.
+
+
+```python
+tsla_data_by_year["Adj Close Tomorrow"] = tsla_data_by_year["Adj Close"].shift(-1)
+tsla_data_by_year["Stock Goes Up Tomorrow"] = tsla_data_by_year["Adj Close"] < tsla_data_by_year["Adj Close Tomorrow"]
+tsla_data_by_year.head(10)
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Date</th>
+      <th>Open</th>
+      <th>High</th>
+      <th>Low</th>
+      <th>Close</th>
+      <th>Adj Close</th>
+      <th>Volume</th>
+      <th>Adj Close Tomorrow</th>
+      <th>Stock Goes Up Tomorrow</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>2010-06-29</td>
+      <td>19.000000</td>
+      <td>25.000000</td>
+      <td>17.540001</td>
+      <td>23.889999</td>
+      <td>23.889999</td>
+      <td>18766300</td>
+      <td>23.830000</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2010-06-30</td>
+      <td>25.790001</td>
+      <td>30.420000</td>
+      <td>23.299999</td>
+      <td>23.830000</td>
+      <td>23.830000</td>
+      <td>17187100</td>
+      <td>21.959999</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>2010-07-01</td>
+      <td>25.000000</td>
+      <td>25.920000</td>
+      <td>20.270000</td>
+      <td>21.959999</td>
+      <td>21.959999</td>
+      <td>8218800</td>
+      <td>19.200001</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>2010-07-02</td>
+      <td>23.000000</td>
+      <td>23.100000</td>
+      <td>18.709999</td>
+      <td>19.200001</td>
+      <td>19.200001</td>
+      <td>5139800</td>
+      <td>16.110001</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>2010-07-06</td>
+      <td>20.000000</td>
+      <td>20.000000</td>
+      <td>15.830000</td>
+      <td>16.110001</td>
+      <td>16.110001</td>
+      <td>6866900</td>
+      <td>15.800000</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>2010-07-07</td>
+      <td>16.400000</td>
+      <td>16.629999</td>
+      <td>14.980000</td>
+      <td>15.800000</td>
+      <td>15.800000</td>
+      <td>6921700</td>
+      <td>17.459999</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>2010-07-08</td>
+      <td>16.139999</td>
+      <td>17.520000</td>
+      <td>15.570000</td>
+      <td>17.459999</td>
+      <td>17.459999</td>
+      <td>7711400</td>
+      <td>17.400000</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>2010-07-09</td>
+      <td>17.580000</td>
+      <td>17.900000</td>
+      <td>16.549999</td>
+      <td>17.400000</td>
+      <td>17.400000</td>
+      <td>4050600</td>
+      <td>17.049999</td>
+      <td>False</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>2010-07-12</td>
+      <td>17.950001</td>
+      <td>18.070000</td>
+      <td>17.000000</td>
+      <td>17.049999</td>
+      <td>17.049999</td>
+      <td>2202500</td>
+      <td>18.139999</td>
+      <td>True</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>2010-07-13</td>
+      <td>17.389999</td>
+      <td>18.639999</td>
+      <td>16.900000</td>
+      <td>18.139999</td>
+      <td>18.139999</td>
+      <td>2680100</td>
+      <td>19.840000</td>
+      <td>True</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+Following the rule buy low sell high, and we're looking at historical data, we can say the following.
+
+To start pick the first day whose following day's Adj Close price goes up, and buy $1000 worth of shares on that day.
+
+We'll have 3 positions.
+
+Buy
+Sell
+Hold
+
+In code:
+
+haveNoStock && !goesUpTomorrow = hold
+
+haveNoStock && goesUpTomorrow = buy
+
+haveStock && !goesUpTomorrow = sell
+
+haveStock && goesUpTomorrow = hold
+
+
+
+```python
+# Setting some default values
+tsla_data_by_year['Position'] = 'Hold'
+tsla_data_by_year['Number Of Stocks Held'] = 0
+tsla_data_by_year['Money In Wallet'] = 0
+```
+
+
+```python
+tsla_data_by_year.at[0, 'Money In Wallet'] = 1000
+tsla_data_by_year.head()
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Date</th>
+      <th>Open</th>
+      <th>High</th>
+      <th>Low</th>
+      <th>Close</th>
+      <th>Adj Close</th>
+      <th>Volume</th>
+      <th>Adj Close Tomorrow</th>
+      <th>Stock Goes Up Tomorrow</th>
+      <th>Position</th>
+      <th>Number Of Stocks Held</th>
+      <th>Money In Wallet</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>2010-06-29</td>
+      <td>19.000000</td>
+      <td>25.00</td>
+      <td>17.540001</td>
+      <td>23.889999</td>
+      <td>23.889999</td>
+      <td>18766300</td>
+      <td>23.830000</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0</td>
+      <td>1000</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2010-06-30</td>
+      <td>25.790001</td>
+      <td>30.42</td>
+      <td>23.299999</td>
+      <td>23.830000</td>
+      <td>23.830000</td>
+      <td>17187100</td>
+      <td>21.959999</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>2010-07-01</td>
+      <td>25.000000</td>
+      <td>25.92</td>
+      <td>20.270000</td>
+      <td>21.959999</td>
+      <td>21.959999</td>
+      <td>8218800</td>
+      <td>19.200001</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>2010-07-02</td>
+      <td>23.000000</td>
+      <td>23.10</td>
+      <td>18.709999</td>
+      <td>19.200001</td>
+      <td>19.200001</td>
+      <td>5139800</td>
+      <td>16.110001</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0</td>
+      <td>0</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>2010-07-06</td>
+      <td>20.000000</td>
+      <td>20.00</td>
+      <td>15.830000</td>
+      <td>16.110001</td>
+      <td>16.110001</td>
+      <td>6866900</td>
+      <td>15.800000</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0</td>
+      <td>0</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+
+```python
+previousRow = ''
+for index, row in tsla_data_by_year.iterrows():
+  if(index > 0):
+    row['Money In Wallet'] = previousRow['Money In Wallet']
+    row['Number Of Stocks Held'] = previousRow['Number Of Stocks Held']
+  if(row['Number Of Stocks Held'] == 0 and not row['Stock Goes Up Tomorrow']):
+    row['Position'] = 'Hold'
+    # print(1)
+  elif(row['Number Of Stocks Held'] == 0 and row['Stock Goes Up Tomorrow']):
+    row['Position'] = 'Buy'
+    row['Number Of Stocks Held'] = row['Money In Wallet'] / row['Adj Close']
+    row['Money In Wallet'] -= row['Number Of Stocks Held'] * row['Adj Close']
+    # print(2)
+  elif(row['Number Of Stocks Held'] > 0 and not row['Stock Goes Up Tomorrow']):
+    row['Position'] = 'Sell'
+    row['Money In Wallet'] += row['Number Of Stocks Held'] * row['Adj Close']
+    row['Number Of Stocks Held'] = 0
+    # print(3)
+  elif(row['Number Of Stocks Held'] > 0 and row['Stock Goes Up Tomorrow']):
+    row['Position'] = 'Hold'
+    # print(4)
+  previousRow = row
+  tsla_data_by_year.at[index] = row
+```
+
+
+```python
+tsla_data_by_year = tsla_data_by_year.round(2)
+tsla_data_by_year.head(999)
+```
+
+
+
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th></th>
+      <th>Date</th>
+      <th>Open</th>
+      <th>High</th>
+      <th>Low</th>
+      <th>Close</th>
+      <th>Adj Close</th>
+      <th>Volume</th>
+      <th>Adj Close Tomorrow</th>
+      <th>Stock Goes Up Tomorrow</th>
+      <th>Position</th>
+      <th>Number Of Stocks Held</th>
+      <th>Money In Wallet</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th>0</th>
+      <td>2010-06-29</td>
+      <td>19.00</td>
+      <td>25.00</td>
+      <td>17.54</td>
+      <td>23.89</td>
+      <td>23.89</td>
+      <td>18766300</td>
+      <td>23.83</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1000.00</td>
+    </tr>
+    <tr>
+      <th>1</th>
+      <td>2010-06-30</td>
+      <td>25.79</td>
+      <td>30.42</td>
+      <td>23.30</td>
+      <td>23.83</td>
+      <td>23.83</td>
+      <td>17187100</td>
+      <td>21.96</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1000.00</td>
+    </tr>
+    <tr>
+      <th>2</th>
+      <td>2010-07-01</td>
+      <td>25.00</td>
+      <td>25.92</td>
+      <td>20.27</td>
+      <td>21.96</td>
+      <td>21.96</td>
+      <td>8218800</td>
+      <td>19.20</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1000.00</td>
+    </tr>
+    <tr>
+      <th>3</th>
+      <td>2010-07-02</td>
+      <td>23.00</td>
+      <td>23.10</td>
+      <td>18.71</td>
+      <td>19.20</td>
+      <td>19.20</td>
+      <td>5139800</td>
+      <td>16.11</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1000.00</td>
+    </tr>
+    <tr>
+      <th>4</th>
+      <td>2010-07-06</td>
+      <td>20.00</td>
+      <td>20.00</td>
+      <td>15.83</td>
+      <td>16.11</td>
+      <td>16.11</td>
+      <td>6866900</td>
+      <td>15.80</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1000.00</td>
+    </tr>
+    <tr>
+      <th>5</th>
+      <td>2010-07-07</td>
+      <td>16.40</td>
+      <td>16.63</td>
+      <td>14.98</td>
+      <td>15.80</td>
+      <td>15.80</td>
+      <td>6921700</td>
+      <td>17.46</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>63.29</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>6</th>
+      <td>2010-07-08</td>
+      <td>16.14</td>
+      <td>17.52</td>
+      <td>15.57</td>
+      <td>17.46</td>
+      <td>17.46</td>
+      <td>7711400</td>
+      <td>17.40</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>1105.06</td>
+    </tr>
+    <tr>
+      <th>7</th>
+      <td>2010-07-09</td>
+      <td>17.58</td>
+      <td>17.90</td>
+      <td>16.55</td>
+      <td>17.40</td>
+      <td>17.40</td>
+      <td>4050600</td>
+      <td>17.05</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1105.06</td>
+    </tr>
+    <tr>
+      <th>8</th>
+      <td>2010-07-12</td>
+      <td>17.95</td>
+      <td>18.07</td>
+      <td>17.00</td>
+      <td>17.05</td>
+      <td>17.05</td>
+      <td>2202500</td>
+      <td>18.14</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>64.81</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>9</th>
+      <td>2010-07-13</td>
+      <td>17.39</td>
+      <td>18.64</td>
+      <td>16.90</td>
+      <td>18.14</td>
+      <td>18.14</td>
+      <td>2680100</td>
+      <td>19.84</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>64.81</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>10</th>
+      <td>2010-07-14</td>
+      <td>17.94</td>
+      <td>20.15</td>
+      <td>17.76</td>
+      <td>19.84</td>
+      <td>19.84</td>
+      <td>4195200</td>
+      <td>19.89</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>64.81</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>11</th>
+      <td>2010-07-15</td>
+      <td>19.94</td>
+      <td>21.50</td>
+      <td>19.00</td>
+      <td>19.89</td>
+      <td>19.89</td>
+      <td>3739800</td>
+      <td>20.64</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>64.81</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>12</th>
+      <td>2010-07-16</td>
+      <td>20.70</td>
+      <td>21.30</td>
+      <td>20.05</td>
+      <td>20.64</td>
+      <td>20.64</td>
+      <td>2621300</td>
+      <td>21.91</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>64.81</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>13</th>
+      <td>2010-07-19</td>
+      <td>21.37</td>
+      <td>22.25</td>
+      <td>20.92</td>
+      <td>21.91</td>
+      <td>21.91</td>
+      <td>2486500</td>
+      <td>20.30</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>1420.05</td>
+    </tr>
+    <tr>
+      <th>14</th>
+      <td>2010-07-20</td>
+      <td>21.85</td>
+      <td>21.85</td>
+      <td>20.05</td>
+      <td>20.30</td>
+      <td>20.30</td>
+      <td>1825300</td>
+      <td>20.22</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1420.05</td>
+    </tr>
+    <tr>
+      <th>15</th>
+      <td>2010-07-21</td>
+      <td>20.66</td>
+      <td>20.90</td>
+      <td>19.50</td>
+      <td>20.22</td>
+      <td>20.22</td>
+      <td>1252500</td>
+      <td>21.00</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>70.23</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>16</th>
+      <td>2010-07-22</td>
+      <td>20.50</td>
+      <td>21.25</td>
+      <td>20.37</td>
+      <td>21.00</td>
+      <td>21.00</td>
+      <td>957800</td>
+      <td>21.29</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>70.23</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>17</th>
+      <td>2010-07-23</td>
+      <td>21.19</td>
+      <td>21.56</td>
+      <td>21.06</td>
+      <td>21.29</td>
+      <td>21.29</td>
+      <td>653600</td>
+      <td>20.95</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>1495.20</td>
+    </tr>
+    <tr>
+      <th>18</th>
+      <td>2010-07-26</td>
+      <td>21.50</td>
+      <td>21.50</td>
+      <td>20.30</td>
+      <td>20.95</td>
+      <td>20.95</td>
+      <td>922200</td>
+      <td>20.55</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1495.20</td>
+    </tr>
+    <tr>
+      <th>19</th>
+      <td>2010-07-27</td>
+      <td>20.91</td>
+      <td>21.18</td>
+      <td>20.26</td>
+      <td>20.55</td>
+      <td>20.55</td>
+      <td>619700</td>
+      <td>20.72</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>72.76</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>20</th>
+      <td>2010-07-28</td>
+      <td>20.55</td>
+      <td>20.90</td>
+      <td>20.51</td>
+      <td>20.72</td>
+      <td>20.72</td>
+      <td>467200</td>
+      <td>20.35</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>1507.57</td>
+    </tr>
+    <tr>
+      <th>21</th>
+      <td>2010-07-29</td>
+      <td>20.77</td>
+      <td>20.88</td>
+      <td>20.00</td>
+      <td>20.35</td>
+      <td>20.35</td>
+      <td>616000</td>
+      <td>19.94</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1507.57</td>
+    </tr>
+    <tr>
+      <th>22</th>
+      <td>2010-07-30</td>
+      <td>20.20</td>
+      <td>20.44</td>
+      <td>19.55</td>
+      <td>19.94</td>
+      <td>19.94</td>
+      <td>426900</td>
+      <td>20.92</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>75.61</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>23</th>
+      <td>2010-08-02</td>
+      <td>20.50</td>
+      <td>20.97</td>
+      <td>20.33</td>
+      <td>20.92</td>
+      <td>20.92</td>
+      <td>718100</td>
+      <td>21.95</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>75.61</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>24</th>
+      <td>2010-08-03</td>
+      <td>21.00</td>
+      <td>21.95</td>
+      <td>20.82</td>
+      <td>21.95</td>
+      <td>21.95</td>
+      <td>1230500</td>
+      <td>21.26</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>1659.54</td>
+    </tr>
+    <tr>
+      <th>25</th>
+      <td>2010-08-04</td>
+      <td>21.95</td>
+      <td>22.18</td>
+      <td>20.85</td>
+      <td>21.26</td>
+      <td>21.26</td>
+      <td>913000</td>
+      <td>20.45</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1659.54</td>
+    </tr>
+    <tr>
+      <th>26</th>
+      <td>2010-08-05</td>
+      <td>21.54</td>
+      <td>21.55</td>
+      <td>20.05</td>
+      <td>20.45</td>
+      <td>20.45</td>
+      <td>796200</td>
+      <td>19.59</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1659.54</td>
+    </tr>
+    <tr>
+      <th>27</th>
+      <td>2010-08-06</td>
+      <td>20.10</td>
+      <td>20.16</td>
+      <td>19.52</td>
+      <td>19.59</td>
+      <td>19.59</td>
+      <td>741900</td>
+      <td>19.60</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>84.71</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>28</th>
+      <td>2010-08-09</td>
+      <td>19.90</td>
+      <td>19.98</td>
+      <td>19.45</td>
+      <td>19.60</td>
+      <td>19.60</td>
+      <td>812700</td>
+      <td>19.03</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>1660.38</td>
+    </tr>
+    <tr>
+      <th>29</th>
+      <td>2010-08-10</td>
+      <td>19.65</td>
+      <td>19.65</td>
+      <td>18.82</td>
+      <td>19.03</td>
+      <td>19.03</td>
+      <td>1281300</td>
+      <td>17.90</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1660.38</td>
+    </tr>
+    <tr>
+      <th>30</th>
+      <td>2010-08-11</td>
+      <td>18.69</td>
+      <td>18.88</td>
+      <td>17.85</td>
+      <td>17.90</td>
+      <td>17.90</td>
+      <td>797600</td>
+      <td>17.60</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>1660.38</td>
+    </tr>
+    <tr>
+      <th>31</th>
+      <td>2010-08-12</td>
+      <td>17.80</td>
+      <td>17.90</td>
+      <td>17.39</td>
+      <td>17.60</td>
+      <td>17.60</td>
+      <td>691000</td>
+      <td>18.32</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>94.34</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>32</th>
+      <td>2010-08-13</td>
+      <td>18.18</td>
+      <td>18.45</td>
+      <td>17.66</td>
+      <td>18.32</td>
+      <td>18.32</td>
+      <td>634000</td>
+      <td>18.78</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>94.34</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>33</th>
+      <td>2010-08-16</td>
+      <td>18.45</td>
+      <td>18.80</td>
+      <td>18.26</td>
+      <td>18.78</td>
+      <td>18.78</td>
+      <td>485800</td>
+      <td>19.15</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>94.34</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>34</th>
+      <td>2010-08-17</td>
+      <td>18.96</td>
+      <td>19.40</td>
+      <td>18.78</td>
+      <td>19.15</td>
+      <td>19.15</td>
+      <td>447900</td>
+      <td>18.77</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>1806.61</td>
+    </tr>
+    <tr>
+      <th>35</th>
+      <td>2010-08-18</td>
+      <td>19.59</td>
+      <td>19.59</td>
+      <td>18.60</td>
+      <td>18.77</td>
+      <td>18.77</td>
+      <td>601300</td>
+      <td>18.79</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>96.25</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>36</th>
+      <td>2010-08-19</td>
+      <td>18.54</td>
+      <td>19.25</td>
+      <td>18.33</td>
+      <td>18.79</td>
+      <td>18.79</td>
+      <td>579100</td>
+      <td>19.10</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>96.25</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>37</th>
+      <td>2010-08-20</td>
+      <td>18.65</td>
+      <td>19.11</td>
+      <td>18.51</td>
+      <td>19.10</td>
+      <td>19.10</td>
+      <td>296000</td>
+      <td>20.13</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>96.25</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>38</th>
+      <td>2010-08-23</td>
+      <td>19.09</td>
+      <td>20.39</td>
+      <td>19.00</td>
+      <td>20.13</td>
+      <td>20.13</td>
+      <td>1088100</td>
+      <td>19.20</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>1937.51</td>
+    </tr>
+    <tr>
+      <th>39</th>
+      <td>2010-08-24</td>
+      <td>19.25</td>
+      <td>19.71</td>
+      <td>18.95</td>
+      <td>19.20</td>
+      <td>19.20</td>
+      <td>673100</td>
+      <td>19.90</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>100.91</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>40</th>
+      <td>2010-08-25</td>
+      <td>19.16</td>
+      <td>19.98</td>
+      <td>18.56</td>
+      <td>19.90</td>
+      <td>19.90</td>
+      <td>503300</td>
+      <td>19.75</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>2008.15</td>
+    </tr>
+    <tr>
+      <th>41</th>
+      <td>2010-08-26</td>
+      <td>19.89</td>
+      <td>20.27</td>
+      <td>19.60</td>
+      <td>19.75</td>
+      <td>19.75</td>
+      <td>433800</td>
+      <td>19.70</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>2008.15</td>
+    </tr>
+    <tr>
+      <th>42</th>
+      <td>2010-08-27</td>
+      <td>19.75</td>
+      <td>19.87</td>
+      <td>19.50</td>
+      <td>19.70</td>
+      <td>19.70</td>
+      <td>379600</td>
+      <td>19.87</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>101.94</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>43</th>
+      <td>2010-08-30</td>
+      <td>19.70</td>
+      <td>20.19</td>
+      <td>19.61</td>
+      <td>19.87</td>
+      <td>19.87</td>
+      <td>732800</td>
+      <td>19.48</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>2025.48</td>
+    </tr>
+    <tr>
+      <th>44</th>
+      <td>2010-08-31</td>
+      <td>19.66</td>
+      <td>19.79</td>
+      <td>19.33</td>
+      <td>19.48</td>
+      <td>19.48</td>
+      <td>201100</td>
+      <td>20.45</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>103.98</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>45</th>
+      <td>2010-09-01</td>
+      <td>19.62</td>
+      <td>20.69</td>
+      <td>19.60</td>
+      <td>20.45</td>
+      <td>20.45</td>
+      <td>494900</td>
+      <td>21.06</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>103.98</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>46</th>
+      <td>2010-09-02</td>
+      <td>20.37</td>
+      <td>21.24</td>
+      <td>20.31</td>
+      <td>21.06</td>
+      <td>21.06</td>
+      <td>487100</td>
+      <td>21.05</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>2189.76</td>
+    </tr>
+    <tr>
+      <th>47</th>
+      <td>2010-09-03</td>
+      <td>20.87</td>
+      <td>21.30</td>
+      <td>20.66</td>
+      <td>21.05</td>
+      <td>21.05</td>
+      <td>434600</td>
+      <td>20.54</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>2189.76</td>
+    </tr>
+    <tr>
+      <th>48</th>
+      <td>2010-09-07</td>
+      <td>20.61</td>
+      <td>21.00</td>
+      <td>20.50</td>
+      <td>20.54</td>
+      <td>20.54</td>
+      <td>243400</td>
+      <td>20.90</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>106.61</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>49</th>
+      <td>2010-09-08</td>
+      <td>20.66</td>
+      <td>20.95</td>
+      <td>20.60</td>
+      <td>20.90</td>
+      <td>20.90</td>
+      <td>288400</td>
+      <td>20.71</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>2228.14</td>
+    </tr>
+    <tr>
+      <th>50</th>
+      <td>2010-09-09</td>
+      <td>21.00</td>
+      <td>21.05</td>
+      <td>20.69</td>
+      <td>20.71</td>
+      <td>20.71</td>
+      <td>376200</td>
+      <td>20.17</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>2228.14</td>
+    </tr>
+    <tr>
+      <th>51</th>
+      <td>2010-09-10</td>
+      <td>20.75</td>
+      <td>20.93</td>
+      <td>19.76</td>
+      <td>20.17</td>
+      <td>20.17</td>
+      <td>386600</td>
+      <td>20.72</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>110.47</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>52</th>
+      <td>2010-09-13</td>
+      <td>20.89</td>
+      <td>20.90</td>
+      <td>20.50</td>
+      <td>20.72</td>
+      <td>20.72</td>
+      <td>360800</td>
+      <td>21.12</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>110.47</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>53</th>
+      <td>2010-09-14</td>
+      <td>20.54</td>
+      <td>21.60</td>
+      <td>20.53</td>
+      <td>21.12</td>
+      <td>21.12</td>
+      <td>654700</td>
+      <td>21.98</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>110.47</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>54</th>
+      <td>2010-09-15</td>
+      <td>20.98</td>
+      <td>22.00</td>
+      <td>20.79</td>
+      <td>21.98</td>
+      <td>21.98</td>
+      <td>684600</td>
+      <td>20.94</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>2428.09</td>
+    </tr>
+    <tr>
+      <th>55</th>
+      <td>2010-09-16</td>
+      <td>22.15</td>
+      <td>23.16</td>
+      <td>20.84</td>
+      <td>20.94</td>
+      <td>20.94</td>
+      <td>2684500</td>
+      <td>20.23</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>2428.09</td>
+    </tr>
+    <tr>
+      <th>56</th>
+      <td>2010-09-17</td>
+      <td>21.02</td>
+      <td>21.32</td>
+      <td>19.80</td>
+      <td>20.23</td>
+      <td>20.23</td>
+      <td>1198500</td>
+      <td>21.06</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>120.02</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>57</th>
+      <td>2010-09-20</td>
+      <td>20.67</td>
+      <td>21.35</td>
+      <td>20.16</td>
+      <td>21.06</td>
+      <td>21.06</td>
+      <td>947500</td>
+      <td>20.77</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>2527.71</td>
+    </tr>
+    <tr>
+      <th>58</th>
+      <td>2010-09-21</td>
+      <td>20.89</td>
+      <td>21.55</td>
+      <td>20.67</td>
+      <td>20.77</td>
+      <td>20.77</td>
+      <td>796000</td>
+      <td>19.87</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>2527.71</td>
+    </tr>
+    <tr>
+      <th>59</th>
+      <td>2010-09-22</td>
+      <td>20.87</td>
+      <td>20.95</td>
+      <td>19.80</td>
+      <td>19.87</td>
+      <td>19.87</td>
+      <td>962900</td>
+      <td>19.56</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>2527.71</td>
+    </tr>
+    <tr>
+      <th>60</th>
+      <td>2010-09-23</td>
+      <td>19.89</td>
+      <td>20.14</td>
+      <td>19.50</td>
+      <td>19.56</td>
+      <td>19.56</td>
+      <td>668100</td>
+      <td>20.10</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>129.23</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>61</th>
+      <td>2010-09-24</td>
+      <td>19.95</td>
+      <td>20.19</td>
+      <td>19.65</td>
+      <td>20.10</td>
+      <td>20.10</td>
+      <td>578900</td>
+      <td>20.53</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>129.23</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>62</th>
+      <td>2010-09-27</td>
+      <td>20.40</td>
+      <td>20.81</td>
+      <td>20.05</td>
+      <td>20.53</td>
+      <td>20.53</td>
+      <td>418600</td>
+      <td>21.40</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>129.23</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>63</th>
+      <td>2010-09-28</td>
+      <td>21.04</td>
+      <td>21.49</td>
+      <td>20.76</td>
+      <td>21.40</td>
+      <td>21.40</td>
+      <td>1214500</td>
+      <td>21.98</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>129.23</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>64</th>
+      <td>2010-09-29</td>
+      <td>21.19</td>
+      <td>22.03</td>
+      <td>21.13</td>
+      <td>21.98</td>
+      <td>21.98</td>
+      <td>1969300</td>
+      <td>20.41</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>2840.44</td>
+    </tr>
+    <tr>
+      <th>65</th>
+      <td>2010-09-30</td>
+      <td>22.00</td>
+      <td>22.15</td>
+      <td>20.19</td>
+      <td>20.41</td>
+      <td>20.41</td>
+      <td>2195800</td>
+      <td>20.60</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>139.17</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>66</th>
+      <td>2010-10-01</td>
+      <td>20.69</td>
+      <td>20.75</td>
+      <td>20.31</td>
+      <td>20.60</td>
+      <td>20.60</td>
+      <td>597700</td>
+      <td>20.99</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>139.17</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>67</th>
+      <td>2010-10-04</td>
+      <td>20.43</td>
+      <td>21.17</td>
+      <td>20.30</td>
+      <td>20.99</td>
+      <td>20.99</td>
+      <td>643600</td>
+      <td>21.12</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>139.17</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>68</th>
+      <td>2010-10-05</td>
+      <td>21.15</td>
+      <td>21.28</td>
+      <td>21.01</td>
+      <td>21.12</td>
+      <td>21.12</td>
+      <td>332000</td>
+      <td>20.46</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>2939.25</td>
+    </tr>
+    <tr>
+      <th>69</th>
+      <td>2010-10-06</td>
+      <td>21.06</td>
+      <td>21.26</td>
+      <td>20.32</td>
+      <td>20.46</td>
+      <td>20.46</td>
+      <td>313400</td>
+      <td>20.43</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>2939.25</td>
+    </tr>
+    <tr>
+      <th>70</th>
+      <td>2010-10-07</td>
+      <td>20.57</td>
+      <td>20.64</td>
+      <td>20.34</td>
+      <td>20.43</td>
+      <td>20.43</td>
+      <td>141000</td>
+      <td>20.43</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>2939.25</td>
+    </tr>
+    <tr>
+      <th>71</th>
+      <td>2010-10-08</td>
+      <td>20.43</td>
+      <td>20.79</td>
+      <td>20.39</td>
+      <td>20.43</td>
+      <td>20.43</td>
+      <td>267800</td>
+      <td>20.24</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>2939.25</td>
+    </tr>
+    <tr>
+      <th>72</th>
+      <td>2010-10-11</td>
+      <td>20.44</td>
+      <td>20.70</td>
+      <td>20.07</td>
+      <td>20.24</td>
+      <td>20.24</td>
+      <td>171200</td>
+      <td>20.24</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>2939.25</td>
+    </tr>
+    <tr>
+      <th>73</th>
+      <td>2010-10-12</td>
+      <td>20.20</td>
+      <td>20.28</td>
+      <td>20.03</td>
+      <td>20.24</td>
+      <td>20.24</td>
+      <td>244000</td>
+      <td>20.54</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>145.22</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>74</th>
+      <td>2010-10-13</td>
+      <td>20.64</td>
+      <td>20.85</td>
+      <td>20.36</td>
+      <td>20.54</td>
+      <td>20.54</td>
+      <td>318200</td>
+      <td>20.75</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>145.22</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>75</th>
+      <td>2010-10-14</td>
+      <td>21.00</td>
+      <td>21.03</td>
+      <td>20.40</td>
+      <td>20.75</td>
+      <td>20.75</td>
+      <td>294800</td>
+      <td>20.54</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>3013.32</td>
+    </tr>
+    <tr>
+      <th>76</th>
+      <td>2010-10-15</td>
+      <td>20.89</td>
+      <td>20.90</td>
+      <td>20.25</td>
+      <td>20.54</td>
+      <td>20.54</td>
+      <td>284700</td>
+      <td>20.23</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>3013.32</td>
+    </tr>
+    <tr>
+      <th>77</th>
+      <td>2010-10-18</td>
+      <td>20.52</td>
+      <td>20.64</td>
+      <td>20.22</td>
+      <td>20.23</td>
+      <td>20.23</td>
+      <td>162800</td>
+      <td>20.05</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>3013.32</td>
+    </tr>
+    <tr>
+      <th>78</th>
+      <td>2010-10-19</td>
+      <td>20.20</td>
+      <td>20.41</td>
+      <td>20.00</td>
+      <td>20.05</td>
+      <td>20.05</td>
+      <td>245200</td>
+      <td>20.65</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>150.29</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>79</th>
+      <td>2010-10-20</td>
+      <td>20.16</td>
+      <td>20.69</td>
+      <td>20.04</td>
+      <td>20.65</td>
+      <td>20.65</td>
+      <td>312500</td>
+      <td>20.75</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>150.29</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>80</th>
+      <td>2010-10-21</td>
+      <td>20.61</td>
+      <td>20.95</td>
+      <td>20.45</td>
+      <td>20.75</td>
+      <td>20.75</td>
+      <td>417100</td>
+      <td>20.72</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>3118.52</td>
+    </tr>
+    <tr>
+      <th>81</th>
+      <td>2010-10-22</td>
+      <td>20.68</td>
+      <td>20.93</td>
+      <td>20.55</td>
+      <td>20.72</td>
+      <td>20.72</td>
+      <td>161100</td>
+      <td>20.85</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>150.51</td>
+      <td>-0.00</td>
+    </tr>
+    <tr>
+      <th>82</th>
+      <td>2010-10-25</td>
+      <td>20.94</td>
+      <td>20.98</td>
+      <td>20.73</td>
+      <td>20.85</td>
+      <td>20.85</td>
+      <td>118500</td>
+      <td>21.36</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>150.51</td>
+      <td>-0.00</td>
+    </tr>
+    <tr>
+      <th>83</th>
+      <td>2010-10-26</td>
+      <td>20.80</td>
+      <td>21.87</td>
+      <td>20.51</td>
+      <td>21.36</td>
+      <td>21.36</td>
+      <td>660900</td>
+      <td>21.00</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>3214.84</td>
+    </tr>
+    <tr>
+      <th>84</th>
+      <td>2010-10-27</td>
+      <td>21.25</td>
+      <td>21.38</td>
+      <td>20.65</td>
+      <td>21.00</td>
+      <td>21.00</td>
+      <td>356500</td>
+      <td>21.19</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>153.09</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>85</th>
+      <td>2010-10-28</td>
+      <td>21.39</td>
+      <td>21.50</td>
+      <td>20.96</td>
+      <td>21.19</td>
+      <td>21.19</td>
+      <td>224200</td>
+      <td>21.84</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>153.09</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>86</th>
+      <td>2010-10-29</td>
+      <td>21.14</td>
+      <td>21.85</td>
+      <td>21.05</td>
+      <td>21.84</td>
+      <td>21.84</td>
+      <td>280600</td>
+      <td>21.41</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>3343.44</td>
+    </tr>
+    <tr>
+      <th>87</th>
+      <td>2010-11-01</td>
+      <td>21.94</td>
+      <td>22.75</td>
+      <td>21.31</td>
+      <td>21.41</td>
+      <td>21.41</td>
+      <td>455800</td>
+      <td>21.25</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>3343.44</td>
+    </tr>
+    <tr>
+      <th>88</th>
+      <td>2010-11-02</td>
+      <td>21.68</td>
+      <td>21.88</td>
+      <td>21.05</td>
+      <td>21.25</td>
+      <td>21.25</td>
+      <td>322500</td>
+      <td>21.77</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>157.34</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>89</th>
+      <td>2010-11-03</td>
+      <td>21.28</td>
+      <td>22.50</td>
+      <td>21.16</td>
+      <td>21.77</td>
+      <td>21.77</td>
+      <td>372600</td>
+      <td>24.90</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>157.34</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>90</th>
+      <td>2010-11-04</td>
+      <td>22.60</td>
+      <td>25.33</td>
+      <td>22.15</td>
+      <td>24.90</td>
+      <td>24.90</td>
+      <td>1874000</td>
+      <td>24.44</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>3917.72</td>
+    </tr>
+    <tr>
+      <th>91</th>
+      <td>2010-11-05</td>
+      <td>24.87</td>
+      <td>24.97</td>
+      <td>23.72</td>
+      <td>24.44</td>
+      <td>24.44</td>
+      <td>1011000</td>
+      <td>24.98</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>160.30</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>92</th>
+      <td>2010-11-08</td>
+      <td>24.50</td>
+      <td>25.00</td>
+      <td>24.03</td>
+      <td>24.98</td>
+      <td>24.98</td>
+      <td>509500</td>
+      <td>24.63</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>4004.28</td>
+    </tr>
+    <tr>
+      <th>93</th>
+      <td>2010-11-09</td>
+      <td>25.00</td>
+      <td>25.69</td>
+      <td>24.05</td>
+      <td>24.63</td>
+      <td>24.63</td>
+      <td>956400</td>
+      <td>29.36</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>162.58</td>
+      <td>-0.00</td>
+    </tr>
+    <tr>
+      <th>94</th>
+      <td>2010-11-10</td>
+      <td>24.48</td>
+      <td>29.97</td>
+      <td>24.05</td>
+      <td>29.36</td>
+      <td>29.36</td>
+      <td>3060500</td>
+      <td>28.04</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>4773.28</td>
+    </tr>
+    <tr>
+      <th>95</th>
+      <td>2010-11-11</td>
+      <td>28.60</td>
+      <td>29.10</td>
+      <td>27.33</td>
+      <td>28.04</td>
+      <td>28.04</td>
+      <td>1945300</td>
+      <td>29.84</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>170.23</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>96</th>
+      <td>2010-11-12</td>
+      <td>28.25</td>
+      <td>30.50</td>
+      <td>28.07</td>
+      <td>29.84</td>
+      <td>29.84</td>
+      <td>2729100</td>
+      <td>30.80</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>170.23</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>97</th>
+      <td>2010-11-15</td>
+      <td>30.22</td>
+      <td>32.94</td>
+      <td>30.22</td>
+      <td>30.80</td>
+      <td>30.80</td>
+      <td>2622900</td>
+      <td>29.67</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>5243.11</td>
+    </tr>
+    <tr>
+      <th>98</th>
+      <td>2010-11-16</td>
+      <td>31.00</td>
+      <td>31.40</td>
+      <td>28.42</td>
+      <td>29.67</td>
+      <td>29.67</td>
+      <td>1347600</td>
+      <td>29.49</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>5243.11</td>
+    </tr>
+    <tr>
+      <th>99</th>
+      <td>2010-11-17</td>
+      <td>30.20</td>
+      <td>30.75</td>
+      <td>28.61</td>
+      <td>29.49</td>
+      <td>29.49</td>
+      <td>750000</td>
+      <td>29.89</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>177.79</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>100</th>
+      <td>2010-11-18</td>
+      <td>30.67</td>
+      <td>30.74</td>
+      <td>28.92</td>
+      <td>29.89</td>
+      <td>29.89</td>
+      <td>956100</td>
+      <td>30.99</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>177.79</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>101</th>
+      <td>2010-11-19</td>
+      <td>30.16</td>
+      <td>31.37</td>
+      <td>29.70</td>
+      <td>30.99</td>
+      <td>30.99</td>
+      <td>1150500</td>
+      <td>33.40</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>177.79</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>102</th>
+      <td>2010-11-22</td>
+      <td>31.57</td>
+      <td>33.45</td>
+      <td>31.50</td>
+      <td>33.40</td>
+      <td>33.40</td>
+      <td>1529700</td>
+      <td>34.57</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>177.79</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>103</th>
+      <td>2010-11-23</td>
+      <td>33.29</td>
+      <td>35.68</td>
+      <td>32.19</td>
+      <td>34.57</td>
+      <td>34.57</td>
+      <td>1577800</td>
+      <td>35.47</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>177.79</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>104</th>
+      <td>2010-11-24</td>
+      <td>35.27</td>
+      <td>35.97</td>
+      <td>34.33</td>
+      <td>35.47</td>
+      <td>35.47</td>
+      <td>1425000</td>
+      <td>35.32</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>6306.31</td>
+    </tr>
+    <tr>
+      <th>105</th>
+      <td>2010-11-26</td>
+      <td>35.60</td>
+      <td>36.00</td>
+      <td>34.75</td>
+      <td>35.32</td>
+      <td>35.32</td>
+      <td>350600</td>
+      <td>34.33</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>6306.31</td>
+    </tr>
+    <tr>
+      <th>106</th>
+      <td>2010-11-29</td>
+      <td>35.41</td>
+      <td>35.95</td>
+      <td>33.33</td>
+      <td>34.33</td>
+      <td>34.33</td>
+      <td>1145600</td>
+      <td>35.33</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>183.70</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>107</th>
+      <td>2010-11-30</td>
+      <td>33.74</td>
+      <td>35.33</td>
+      <td>33.41</td>
+      <td>35.33</td>
+      <td>35.33</td>
+      <td>2222600</td>
+      <td>34.35</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>6490.01</td>
+    </tr>
+    <tr>
+      <th>108</th>
+      <td>2010-12-01</td>
+      <td>35.87</td>
+      <td>36.42</td>
+      <td>33.45</td>
+      <td>34.35</td>
+      <td>34.35</td>
+      <td>1299200</td>
+      <td>32.35</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>6490.01</td>
+    </tr>
+    <tr>
+      <th>109</th>
+      <td>2010-12-02</td>
+      <td>34.01</td>
+      <td>34.30</td>
+      <td>31.20</td>
+      <td>32.35</td>
+      <td>32.35</td>
+      <td>2007000</td>
+      <td>31.49</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>6490.01</td>
+    </tr>
+    <tr>
+      <th>110</th>
+      <td>2010-12-03</td>
+      <td>32.01</td>
+      <td>32.25</td>
+      <td>30.87</td>
+      <td>31.49</td>
+      <td>31.49</td>
+      <td>1160100</td>
+      <td>30.31</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>6490.01</td>
+    </tr>
+    <tr>
+      <th>111</th>
+      <td>2010-12-06</td>
+      <td>31.35</td>
+      <td>31.45</td>
+      <td>29.56</td>
+      <td>30.31</td>
+      <td>30.31</td>
+      <td>1274400</td>
+      <td>31.56</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>214.12</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>112</th>
+      <td>2010-12-07</td>
+      <td>30.49</td>
+      <td>32.40</td>
+      <td>30.05</td>
+      <td>31.56</td>
+      <td>31.56</td>
+      <td>1311300</td>
+      <td>32.37</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>214.12</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>113</th>
+      <td>2010-12-08</td>
+      <td>32.48</td>
+      <td>32.49</td>
+      <td>31.52</td>
+      <td>32.37</td>
+      <td>32.37</td>
+      <td>660000</td>
+      <td>32.05</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>6931.10</td>
+    </tr>
+    <tr>
+      <th>114</th>
+      <td>2010-12-09</td>
+      <td>32.51</td>
+      <td>32.72</td>
+      <td>31.65</td>
+      <td>32.05</td>
+      <td>32.05</td>
+      <td>406000</td>
+      <td>31.52</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>6931.10</td>
+    </tr>
+    <tr>
+      <th>115</th>
+      <td>2010-12-10</td>
+      <td>32.05</td>
+      <td>32.92</td>
+      <td>31.13</td>
+      <td>31.52</td>
+      <td>31.52</td>
+      <td>429400</td>
+      <td>30.55</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>6931.10</td>
+    </tr>
+    <tr>
+      <th>116</th>
+      <td>2010-12-13</td>
+      <td>31.64</td>
+      <td>31.77</td>
+      <td>30.40</td>
+      <td>30.55</td>
+      <td>30.55</td>
+      <td>410400</td>
+      <td>28.53</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>6931.10</td>
+    </tr>
+    <tr>
+      <th>117</th>
+      <td>2010-12-14</td>
+      <td>30.29</td>
+      <td>30.39</td>
+      <td>27.76</td>
+      <td>28.53</td>
+      <td>28.53</td>
+      <td>1765700</td>
+      <td>29.60</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>242.94</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>118</th>
+      <td>2010-12-15</td>
+      <td>28.67</td>
+      <td>29.97</td>
+      <td>28.53</td>
+      <td>29.60</td>
+      <td>29.60</td>
+      <td>742900</td>
+      <td>30.81</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>242.94</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>119</th>
+      <td>2010-12-16</td>
+      <td>30.00</td>
+      <td>30.91</td>
+      <td>29.65</td>
+      <td>30.81</td>
+      <td>30.81</td>
+      <td>790100</td>
+      <td>31.36</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>242.94</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>120</th>
+      <td>2010-12-17</td>
+      <td>31.34</td>
+      <td>31.54</td>
+      <td>30.71</td>
+      <td>31.36</td>
+      <td>31.36</td>
+      <td>813000</td>
+      <td>31.70</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>242.94</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>121</th>
+      <td>2010-12-20</td>
+      <td>31.64</td>
+      <td>32.19</td>
+      <td>31.26</td>
+      <td>31.70</td>
+      <td>31.70</td>
+      <td>523400</td>
+      <td>32.26</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>242.94</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>122</th>
+      <td>2010-12-21</td>
+      <td>31.80</td>
+      <td>32.69</td>
+      <td>31.71</td>
+      <td>32.26</td>
+      <td>32.26</td>
+      <td>777700</td>
+      <td>32.63</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>242.94</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>123</th>
+      <td>2010-12-22</td>
+      <td>32.25</td>
+      <td>32.86</td>
+      <td>31.70</td>
+      <td>32.63</td>
+      <td>32.63</td>
+      <td>833300</td>
+      <td>30.09</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>7927.16</td>
+    </tr>
+    <tr>
+      <th>124</th>
+      <td>2010-12-23</td>
+      <td>31.26</td>
+      <td>32.48</td>
+      <td>29.92</td>
+      <td>30.09</td>
+      <td>30.09</td>
+      <td>1552600</td>
+      <td>25.55</td>
+      <td>False</td>
+      <td>Hold</td>
+      <td>0.00</td>
+      <td>7927.16</td>
+    </tr>
+    <tr>
+      <th>125</th>
+      <td>2010-12-27</td>
+      <td>28.02</td>
+      <td>28.58</td>
+      <td>25.06</td>
+      <td>25.55</td>
+      <td>25.55</td>
+      <td>9301900</td>
+      <td>26.41</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>310.26</td>
+      <td>-0.00</td>
+    </tr>
+    <tr>
+      <th>126</th>
+      <td>2010-12-28</td>
+      <td>25.85</td>
+      <td>26.75</td>
+      <td>25.00</td>
+      <td>26.41</td>
+      <td>26.41</td>
+      <td>4056300</td>
+      <td>27.73</td>
+      <td>True</td>
+      <td>Hold</td>
+      <td>310.26</td>
+      <td>-0.00</td>
+    </tr>
+    <tr>
+      <th>127</th>
+      <td>2010-12-29</td>
+      <td>27.03</td>
+      <td>28.01</td>
+      <td>26.50</td>
+      <td>27.73</td>
+      <td>27.73</td>
+      <td>3319200</td>
+      <td>26.50</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>8603.53</td>
+    </tr>
+    <tr>
+      <th>128</th>
+      <td>2010-12-30</td>
+      <td>27.70</td>
+      <td>27.90</td>
+      <td>26.38</td>
+      <td>26.50</td>
+      <td>26.50</td>
+      <td>2041100</td>
+      <td>26.63</td>
+      <td>True</td>
+      <td>Buy</td>
+      <td>324.66</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <th>129</th>
+      <td>2010-12-31</td>
+      <td>26.57</td>
+      <td>27.25</td>
+      <td>26.50</td>
+      <td>26.63</td>
+      <td>26.63</td>
+      <td>1417900</td>
+      <td>NaN</td>
+      <td>False</td>
+      <td>Sell</td>
+      <td>0.00</td>
+      <td>8645.73</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+
+
+As the end of 2010 we would have $8,645 if we knew the future.
+
+
+
+```python
+# TODO Next
+# Add indicators
+# Add Decision Tree
+```
+
+
+```python
+
+```
