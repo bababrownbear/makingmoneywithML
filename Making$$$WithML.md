@@ -635,7 +635,7 @@ tsla_data_by_year['30 Day STD'] = tsla_data_by_year['Adj Close'].rolling(window=
 tsla_data_by_year['Upper Band'] = tsla_data_by_year['30 Day MA'] + (tsla_data_by_year['30 Day STD'] * 2)
 tsla_data_by_year['Lower Band'] = tsla_data_by_year['30 Day MA'] - (tsla_data_by_year['30 Day STD'] * 2)
 
-# Simple 30 Day Bollinger Band for Tesla (2016-2017)
+# Simple 30 Day Bollinger Band for Tesla
 tsla_data_by_year[['Adj Close', '30 Day MA', 'Upper Band', 'Lower Band']].plot(figsize=(12,6))
 plt.title('30 Day Bollinger Band for Tesla')
 plt.ylabel('Price (USD)')
